@@ -13,11 +13,11 @@ add_library(MyGUI2 STATIC
 )
 
 target_include_directories(MyGUI2
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/GUIstandard
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/GUIstandardV1
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/inc
 )
 
 target_link_libraries(MyGUI2 
                       PRIVATE SDL2::SDL2 SDL2_image::SDL2_image
                       PRIVATE SDL2_ttf::SDL2_ttf
-                      PUBLIC geometry_module)
+                      PUBLIC  GeomLib)
