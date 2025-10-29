@@ -1,0 +1,6 @@
+.vscode/
+build/
+backlog.txt
+temp
+
+MyGUI_old.h
