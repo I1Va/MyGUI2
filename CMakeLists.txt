@@ -13,7 +13,7 @@ add_library(MyGUI2 STATIC
 )
 
 target_include_directories(MyGUI2
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/GUIstandardV1
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gui-standard/include
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/inc
 )
 
