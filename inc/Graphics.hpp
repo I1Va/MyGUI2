@@ -2,6 +2,7 @@
 
 
 #include "dr4/window.hpp"
+#include "misc/dr4_ifc.hpp"
 #include <SDL2/SDL.h>
 #include <string>
 
@@ -22,11 +23,6 @@ public:
         const int height
     ) : title_(title), size_(width, height)
     {
-        if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-            printf("SDL_Init Error: %s\n", SDL_GetError());
-            // return 1;
-        }
-
         window_ = SDL_CreateWindow(
             title_.c_str(),
             SDL_WINDOWPOS_CENTERED,
@@ -55,7 +51,7 @@ public:
         if (window_) SDL_DestroyWindow(window_);
         SDL_Quit();
     }
-
+    
     void SetTitle(const std::string &title) override { title_ = title; }
     const std::string &GetTitle() const override { return title_; }
     dr4::Vec2f GetSize() const override { return size_; };
@@ -65,7 +61,10 @@ public:
         isOpen_ = true;
     };
     bool IsOpen() const override { return isOpen_; }
-    void Close() override { SDL_HideWindow(window_); }
+    void Close() override { 
+        SDL_HideWindow(window_); 
+        isOpen_ = false;
+    }
 
     void Clear(const dr4::Color &color) override {};
     void Draw(const dr4::Texture &texture, dr4::Vec2f pos) override {}
@@ -84,14 +83,14 @@ public:
             
             case SDL_KEYDOWN:
                 dr4Event.type = dr4::Event::Type::KEY_DOWN;
-                dr4Event.keyDown.sym   = SDLEvent.key.keysym.sym;
-                dr4Event.keyDown.mod   = SDLEvent.key.keysym.mod;
+                dr4Event.keyDown.sym = static_cast<dr4::KeySyms>(SDLEvent.key.keysym.sym);
+                dr4Event.keyDown.mod = static_cast<dr4::KeyModes>(SDLEvent.key.keysym.mod);
                 return dr4Event;
             
             case SDL_KEYUP:
                 dr4Event.type = dr4::Event::Type::KEY_UP;
-                dr4Event.keyDown.sym   = SDLEvent.key.keysym.sym;
-                dr4Event.keyDown.mod   = SDLEvent.key.keysym.mod;
+                dr4Event.keyDown.sym   = static_cast<dr4::KeySyms>(SDLEvent.key.keysym.sym);
+                dr4Event.keyDown.mod   = static_cast<dr4::KeyModes>(SDLEvent.key.keysym.mod);
                 return dr4Event;
                 
             case SDL_MOUSEWHEEL:
@@ -137,6 +136,26 @@ public:
         SDL_GetMouseState(&prevMouseX, &prevMouseY);
         return std::nullopt;
     }
+};
+
+class Texture : public dr4::Texture {
+    SDL_Texture* texture_;
+};
+
+class ABGraphicsPlagin : public dr4::DR4Backend {
+    const std::string name_ = "ABGraphicsPlagin";
+
+public:
+    ABGraphicsPlagin() {
+        if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+            printf("ABGraphicsPlagin : SDL_Init Error. %s\n", SDL_GetError());
+            // return 1;
+        }
+    }
+
+    virtual const std::string &Name() const { return name_; }
+
+    virtual dr4::Window *CreateWindow() { return new Window("Window", 100, 100); }
 };
 
 }
