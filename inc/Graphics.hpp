@@ -58,17 +58,18 @@ class Texture : public dr4::Texture {
     SDL_Texture* texture_;
 
 public: 
-    Texture(SDL_Renderer *renderer, int width=100, int height=100): renderer_(renderer), size_(width, height)
-    {
+    Texture(SDL_Renderer *renderer, int width=0, int height=0): renderer_(renderer), size_(width, height) {}
+
+    void SetSize(dr4::Vec2f size) override {
+        size_ = size; 
         texture_ = SDL_CreateTexture(
             renderer_,
             SDL_PIXELFORMAT_RGBA8888,
             SDL_TEXTUREACCESS_TARGET,
-            width, height
+            size_.x, size_.y
         );
     }
 
-    void SetSize(dr4::Vec2f size) override {size_ = size; }
     dr4::Vec2f GetSize() const override { return size_; }
     float GetWidth() const override { return size_.x; }
     float GetHeight() const override { return size_.y; }
@@ -76,20 +77,23 @@ public:
     void Draw(const dr4::Rectangle &rect) override {
         RendererGuard renderGuard(renderer_);
 
+        SDL_SetRenderTarget(renderer_, texture_);
+
         SDL_Rect borderRect = SDL_Rect(rect.rect.pos.x, rect.rect.pos.y, rect.rect.size.x, rect.rect.size.y);
         SDL_SetRenderDrawColor(renderer_, rect.borderColor.r, rect.borderColor.g, rect.borderColor.b, rect.borderColor.a);
-        SDL_RenderDrawRect(renderer_, &borderRect);
+        SDL_RenderFillRect(renderer_, &borderRect);
 
         if (rect.borderThickness * 2 < std::min(rect.rect.size.x, rect.rect.size.y)) {
             SDL_Rect innerRect = 
             SDL_Rect(
                 rect.rect.pos.x  + rect.borderThickness,
                 rect.rect.pos.y  + rect.borderThickness, 
-                rect.rect.size.x - rect.borderThickness, 
-                rect.rect.size.y - rect.borderThickness
+                rect.rect.size.x - 2 * rect.borderThickness, 
+                rect.rect.size.y - 2 * rect.borderThickness
             );
+            std::cout << innerRect.x << " " << innerRect.y << " " << innerRect.w << " " << innerRect.h << "\n";
             SDL_SetRenderDrawColor(renderer_, rect.fill.r, rect.fill.g, rect.fill.b, rect.fill.a);
-            SDL_RenderDrawRect(renderer_, &innerRect);
+            SDL_RenderFillRect(renderer_, &innerRect);
         }
     }
 
@@ -101,7 +105,7 @@ public:
             const Texture &src = dynamic_cast<const Texture &>(texture);
 
             SDL_SetRenderTarget(renderer_, texture_);
-            SDL_Rect dstRect = SDL_Rect(pos.x, pos.y, size_.x, size_.y);
+            SDL_Rect dstRect = SDL_Rect(pos.x, pos.y, src.size_.x, src.size_.y);
             SDL_RenderCopy(renderer_, src.texture_, NULL, &dstRect);
         } catch (const std::bad_cast& e) {
             std::cerr << "Bad cast: " << e.what() << '\n';
@@ -173,18 +177,23 @@ public:
         isOpen_ = false;
     }
 
-    void Clear(const dr4::Color &color) override {};
+    void Clear(const dr4::Color &color) override {
+        SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
+        SDL_Rect full = SDL_Rect(0, 0, size_.x, size_.y);
+        SDL_RenderFillRect(renderer_, &full);
+    };
+
     void Draw(const dr4::Texture &texture, dr4::Vec2f pos) override {
         try {
             const Texture &src = dynamic_cast<const Texture &>(texture);
     
-            SDL_Rect dstRect = SDL_Rect(pos.x, pos.y, size_.x, size_.y);
+            SDL_Rect dstRect = SDL_Rect(pos.x, pos.y, src.size_.x, src.size_.y);
             SDL_RenderCopy(renderer_, src.texture_, NULL, &dstRect);
         } catch (const std::bad_cast& e) {
             std::cerr << "Bad cast: " << e.what() << '\n';
         }
-   
     }
+
     void Display() override { SDL_RenderPresent(renderer_); }
 
     std::optional<dr4::Event> PollEvent() override {
