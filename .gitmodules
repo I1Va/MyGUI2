@@ -1,3 +1,6 @@
 [submodule "gui-standard"]
 	path = gui-standard
-	url = git@github.com:I1Va/gui-standard
+	url = git@github.com:random-username-here/mipt-ded-zemax.git
+[submodule "mipt-ded-zemax"]
+	path = mipt-ded-zemax
+	url = https://github.com/random-username-here/mipt-ded-zemax.git

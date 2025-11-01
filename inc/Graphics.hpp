@@ -5,8 +5,113 @@
 #include "misc/dr4_ifc.hpp"
 #include <SDL2/SDL.h>
 #include <string>
+#include <typeinfo>
+
+class Window;
+class Texture;
 
 namespace gr {
+
+inline bool isNullRect(const SDL_Rect &rect) {
+    return (rect.x == 0 && rect.y == 0 &&
+            rect.w == 0 && rect.h == 0);
+}
+
+struct RendererGuard {
+    SDL_Renderer* renderer_;
+    SDL_Texture* savedTarget_;
+    SDL_Rect savedViewport_;
+    SDL_Rect savedClip_;
+    Uint8 r_, g_, b_, a_;
+    SDL_BlendMode blend_;
+
+RendererGuard(SDL_Renderer* renderer) : renderer_(renderer) {
+    savedTarget_ = SDL_GetRenderTarget(renderer_);
+    SDL_GetRenderDrawColor(renderer_, &r_, &g_, &b_, &a_);
+    SDL_GetRenderDrawBlendMode(renderer_, &blend_);
+    SDL_RenderGetViewport(renderer_, &savedViewport_);
+    SDL_RenderGetClipRect(renderer_, &savedClip_);
+};
+
+~RendererGuard() {
+    if (renderer_)
+        SDL_SetRenderTarget(renderer_, savedTarget_); // restore previous render target
+            
+    SDL_SetRenderDrawColor(renderer_, r_, g_, b_, a_); 
+    SDL_SetRenderDrawBlendMode(renderer_, blend_);     
+    
+    if (!isNullRect(savedViewport_))
+        SDL_RenderSetViewport(renderer_, &savedViewport_);
+    else
+        SDL_RenderSetViewport(renderer_, nullptr);
+
+    if (!isNullRect(savedClip_))
+        SDL_RenderSetClipRect(renderer_, &savedClip_);
+    else
+        SDL_RenderSetClipRect(renderer_, nullptr);
+    }
+};
+
+class Texture : public dr4::Texture {
+    SDL_Renderer *renderer_;
+    dr4::Vec2f size_;
+    SDL_Texture* texture_;
+
+public: 
+    Texture(SDL_Renderer *renderer, int width=100, int height=100): renderer_(renderer), size_(width, height)
+    {
+        texture_ = SDL_CreateTexture(
+            renderer_,
+            SDL_PIXELFORMAT_RGBA8888,
+            SDL_TEXTUREACCESS_TARGET,
+            width, height
+        );
+    }
+
+    void SetSize(dr4::Vec2f size) override {size_ = size; }
+    dr4::Vec2f GetSize() const override { return size_; }
+    float GetWidth() const override { return size_.x; }
+    float GetHeight() const override { return size_.y; }
+    
+    void Draw(const dr4::Rectangle &rect) override {
+        RendererGuard renderGuard(renderer_);
+
+        SDL_Rect borderRect = SDL_Rect(rect.rect.pos.x, rect.rect.pos.y, rect.rect.size.x, rect.rect.size.y);
+        SDL_SetRenderDrawColor(renderer_, rect.borderColor.r, rect.borderColor.g, rect.borderColor.b, rect.borderColor.a);
+        SDL_RenderDrawRect(renderer_, &borderRect);
+
+        if (rect.borderThickness * 2 < std::min(rect.rect.size.x, rect.rect.size.y)) {
+            SDL_Rect innerRect = 
+            SDL_Rect(
+                rect.rect.pos.x  + rect.borderThickness,
+                rect.rect.pos.y  + rect.borderThickness, 
+                rect.rect.size.x - rect.borderThickness, 
+                rect.rect.size.y - rect.borderThickness
+            );
+            SDL_SetRenderDrawColor(renderer_, rect.fill.r, rect.fill.g, rect.fill.b, rect.fill.a);
+            SDL_RenderDrawRect(renderer_, &innerRect);
+        }
+    }
+
+    void Draw(const dr4::Text &text) override {}
+    void Draw(const dr4::Texture &texture, const dr4::Vec2f &pos) override {
+        RendererGuard renderGuard(renderer_);
+    
+        try {
+            const Texture &src = dynamic_cast<const Texture &>(texture);
+
+            SDL_SetRenderTarget(renderer_, texture_);
+            SDL_Rect dstRect = SDL_Rect(pos.x, pos.y, size_.x, size_.y);
+            SDL_RenderCopy(renderer_, src.texture_, NULL, &dstRect);
+        } catch (const std::bad_cast& e) {
+            std::cerr << "Bad cast: " << e.what() << '\n';
+        }
+    }
+
+    inline ~Texture() {};
+
+    friend class Window;
+};
 
 class Window : public dr4::Window {
     SDL_Renderer *renderer_ = nullptr;
@@ -19,8 +124,8 @@ public:
     Window
     (
         const std::string &title,
-        const int width,
-        const int height
+        const int width=100,
+        const int height=100
     ) : title_(title), size_(width, height)
     {
         window_ = SDL_CreateWindow(
@@ -55,6 +160,8 @@ public:
     void SetTitle(const std::string &title) override { title_ = title; }
     const std::string &GetTitle() const override { return title_; }
     dr4::Vec2f GetSize() const override { return size_; };
+    void SetSize(const ::dr4::Vec2f& size) { size_ = size; }
+    dr4::Texture *CreateTexture() { return new Texture(renderer_); }
 
     void Open() override { 
         SDL_ShowWindow(window_);
@@ -67,7 +174,17 @@ public:
     }
 
     void Clear(const dr4::Color &color) override {};
-    void Draw(const dr4::Texture &texture, dr4::Vec2f pos) override {}
+    void Draw(const dr4::Texture &texture, dr4::Vec2f pos) override {
+        try {
+            const Texture &src = dynamic_cast<const Texture &>(texture);
+    
+            SDL_Rect dstRect = SDL_Rect(pos.x, pos.y, size_.x, size_.y);
+            SDL_RenderCopy(renderer_, src.texture_, NULL, &dstRect);
+        } catch (const std::bad_cast& e) {
+            std::cerr << "Bad cast: " << e.what() << '\n';
+        }
+   
+    }
     void Display() override { SDL_RenderPresent(renderer_); }
 
     std::optional<dr4::Event> PollEvent() override {
@@ -106,16 +223,16 @@ public:
         
             case SDL_MOUSEBUTTONDOWN:
                 dr4Event.type = dr4::Event::Type::MOUSE_DOWN;
-                dr4Event.mouseDown.button = SDLEvent.button.button;
-                dr4Event.mouseDown.pos = dr4::Vec2f(SDLEvent.button.x, SDLEvent.button.y);
-                dr4Event.mouseDown.pressed = true;
+                dr4Event.mouseButton.button = SDLEvent.button.button;
+                dr4Event.mouseButton.pos = dr4::Vec2f(SDLEvent.button.x, SDLEvent.button.y);
+                dr4Event.mouseButton.pressed = true;
                 return dr4Event;
 
             case SDL_MOUSEBUTTONUP:
-                dr4Event.type = dr4::Event::Type::MOUSE_DOWN;
-                dr4Event.mouseDown.button = SDLEvent.button.button;
-                dr4Event.mouseDown.pos = dr4::Vec2f(SDLEvent.button.x, SDLEvent.button.y);
-                dr4Event.mouseDown.pressed = false;
+                dr4Event.type = dr4::Event::Type::MOUSE_UP;
+                dr4Event.mouseButton.button = SDLEvent.button.button;
+                dr4Event.mouseButton.pos = dr4::Vec2f(SDLEvent.button.x, SDLEvent.button.y);
+                dr4Event.mouseButton.pressed = false;
                 return dr4Event;
             
             case SDL_MOUSEMOTION:
@@ -138,9 +255,7 @@ public:
     }
 };
 
-class Texture : public dr4::Texture {
-    SDL_Texture* texture_;
-};
+
 
 class ABGraphicsPlagin : public dr4::DR4Backend {
     const std::string name_ = "ABGraphicsPlagin";
@@ -153,9 +268,9 @@ public:
         }
     }
 
-    virtual const std::string &Name() const { return name_; }
+    const std::string &Name() const { return name_; }
 
-    virtual dr4::Window *CreateWindow() { return new Window("Window", 100, 100); }
+    dr4::Window *CreateWindow() { return new Window("Window"); }
 };
 
 }
